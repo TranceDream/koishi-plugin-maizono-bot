@@ -1,0 +1,40 @@
+{
+  "name": "@tranced/koishi-plugin-maizono-bot",
+  "description": "天大深夜雀食堂舞园Bot",
+  "version": "1.0.0",
+  "contributors": [
+    "TranceDream <xgxx111@outlook.com>"
+  ],
+  "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "files": [
+    "lib",
+    "dist"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "chatbot",
+    "koishi",
+    "plugin",
+    "minio"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TranceDream/koishi-plugin-maizono-bot.git"
+  },
+  "peerDependencies": {
+    "koishi": "^4.18.3"
+  },
+  "dependencies": {
+    "@satorijs/element": "^3.1.7",
+    "cheerio": "^1.0.0",
+    "minio": "^8.0.3",
+    "node-fetch": "^3.3.2"
+  },
+  "koishi": {
+    "description": {
+      "zh": "天大深夜雀食堂舞园Bot - 提供对接MinIO的语录存储功能"
+    },
+    "hidden": true
+  }
+}
