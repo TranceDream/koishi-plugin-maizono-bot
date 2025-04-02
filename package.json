@@ -1,7 +1,7 @@
 {
   "name": "@tranced/koishi-plugin-maizono-bot",
   "description": "天大深夜雀食堂舞园Bot",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "contributors": [
     "TranceDream <xgxx111@outlook.com>"
   ],
@@ -29,12 +29,13 @@
     "@satorijs/element": "^3.1.7",
     "cheerio": "^1.0.0",
     "minio": "^8.0.3",
-    "node-fetch": "2"
+    "node-fetch": "2",
+    "openai": "^4.90.0"
   },
   "koishi": {
     "description": {
-      "zh": "天大深夜雀食堂舞园Bot - 提供对接MinIO的语录存储功能"
+      "zh": "天大深夜雀食堂舞园Bot - 提供对接MinIO的语录存储以及一些神秘实用功能"
     },
-    "hidden": true
+    "hidden": false
   }
 }
