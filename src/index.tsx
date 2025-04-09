@@ -14,6 +14,7 @@ interface MaizonoBotQuoteConfig {
   useSSL: boolean;
   bucketName: string;
   quotesDir: string;
+  uploadDir: string;
 }
 
 interface MaizonoBotOllamaConfig {
@@ -45,6 +46,7 @@ export const Config: Schema<MaizonoBotConfig> = Schema.object({
   useSSL: Schema.boolean().default(false).description('是否使用SSL'),
   bucketName: Schema.string().default(name).description('Bucket名称'),
   quotesDir: Schema.string().default('').description('对象存储路径(前缀)'),
+  uploadDir: Schema.string().default('').description('对象存储路径(前缀)'),
   enableOllamaGeneration: Schema.boolean().default(false).description('是否启用Ollama生成功能'),
   ollamaEndPoint: Schema.string().default('http://localhost:11434/v1').description('Ollama Endpoint'),
   ollamaToken: Schema.string().default('ollama').description('Ollama Token'),
@@ -83,7 +85,7 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
     )
 
     // 从原始uri中获取fileid生成新文件名
-    const fileName: string = `${config.quotesDir}${Date.now()}-${
+    const fileName: string = `${config.uploadDir}${Date.now()}-${
       new URLSearchParams(src.split('?')[1]).get('fileid') ?? 'undefined'
     }`
 
