@@ -7,29 +7,30 @@ import * as Minio from 'minio'
 export const name = 'maizono-bot'
 
 interface MaizonoBotQuoteConfig {
-  endPoint: string;
-  port: number;
-  accessKey: string;
-  secretKey: string;
-  useSSL: boolean;
-  bucketName: string;
-  quotesDir: string;
-  uploadDir: string;
+  endPoint: string
+  port: number
+  accessKey: string
+  secretKey: string
+  useSSL: boolean
+  bucketName: string
+  quotesDir: string
+  uploadDir: string
 }
 
 interface MaizonoBotOllamaConfig {
-  enableOllamaGeneration: boolean;
-  ollamaEndPoint: string;
-  ollamaToken: string;
-  systemPrompt?: string;
+  enableOllamaGeneration: boolean
+  ollamaEndPoint: string
+  ollamaToken: string
+  modelName: string
+  systemPrompt?: string
 }
 
 interface LLMMessage {
-  role: 'user' | 'system';
-  content: string;
+  role: 'user' | 'system'
+  content: string
 }
 
-export type MaizonoBotConfig = MaizonoBotQuoteConfig & MaizonoBotOllamaConfig;
+export type MaizonoBotConfig = MaizonoBotQuoteConfig & MaizonoBotOllamaConfig
 
 export const Config: Schema<MaizonoBotConfig> = Schema.object({
   endPoint: Schema.string().required().description('MinIO Endpoint'),
@@ -47,9 +48,16 @@ export const Config: Schema<MaizonoBotConfig> = Schema.object({
   bucketName: Schema.string().default(name).description('Bucket名称'),
   quotesDir: Schema.string().default('').description('对象存储路径(前缀)'),
   uploadDir: Schema.string().default('').description('对象存储路径(前缀)'),
-  enableOllamaGeneration: Schema.boolean().default(false).description('是否启用Ollama生成功能'),
-  ollamaEndPoint: Schema.string().default('http://localhost:11434/v1').description('Ollama Endpoint'),
+  enableOllamaGeneration: Schema.boolean()
+    .default(false)
+    .description('是否启用Ollama生成功能'),
+  ollamaEndPoint: Schema.string()
+    .default('http://localhost:11434/v1')
+    .description('Ollama Endpoint'),
   ollamaToken: Schema.string().default('ollama').description('Ollama Token'),
+  modelName: Schema.string()
+    .default('deepseek-r1:latest')
+    .description('大模型名称'),
   systemPrompt: Schema.string().description('系统提示词')
 })
 
@@ -101,7 +109,7 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
   ctx
     .command('上传语录')
     .usage('支持连续发送图片，回复"结束"结束上传')
-    .action(async (argv) => {
+    .action(async argv => {
       const { session } = argv
       await session.send('发送图片开始上传，回复"结束"结束上传')
 
@@ -117,17 +125,17 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
 
       // 获取原始输入元素图片src，过滤非图元素
       const inputs: string[] = rawInputs
-        .map((rr) => {
+        .map(rr => {
           const $ = cheerio.load(rr)
           return $('img').attr('src')
         })
-        .filter((item) => item != null)
+        .filter(item => item != null)
 
       // 轮流上传，获取上传后对象uri
       const results: string[] = (
         await Promise.allSettled(
-          inputs.map((e) =>
-            fetchAndUploadImages(e).catch((error) => {
+          inputs.map(e =>
+            fetchAndUploadImages(e).catch(error => {
               logger.error(`上传语录 - ${error}`)
               session.send(error)
               return null
@@ -136,7 +144,7 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
         )
       )
         .filter(({ status }) => status == 'fulfilled')
-        .map((e) => (e as PromiseFulfilledResult<string>).value)
+        .map(e => (e as PromiseFulfilledResult<string>).value)
 
       return `试图上传${inputs.length}张图片\n上传成功${results.length}张图片`
     })
@@ -146,7 +154,7 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
   ctx
     .command('语录')
     .usage('随机抽取一张语录图')
-    .action(async (argv) => {
+    .action(async argv => {
       console.log(argv)
       const { session } = argv
 
@@ -155,14 +163,10 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
         (resolve, reject) => {
           const objects: Minio.BucketItem[] = []
           const stream: Minio.BucketStream<Minio.BucketItem> =
-            minioClient.listObjectsV2(
-              config.bucketName,
-              config.quotesDir,
-              true
-            )
-          stream.on('data', (obj) => objects.push(obj))
+            minioClient.listObjectsV2(config.bucketName, config.quotesDir, true)
+          stream.on('data', obj => objects.push(obj))
           stream.on('end', () => resolve(objects))
-          stream.on('error', (err) => reject(err))
+          stream.on('error', err => reject(err))
         }
       )
 
@@ -173,7 +177,8 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
       await session.send(
         <img
           src={`${minioProtocol}://${config.endPoint}:${config.port}/${config.bucketName}/${randomQuote}`}
-          alt={'quote'} />
+          alt={'quote'}
+        />
       )
     })
 
@@ -182,7 +187,7 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
   ctx
     .command('语录十连')
     .usage('随机抽取十张语录图')
-    .action(async (argv) => {
+    .action(async argv => {
       const { session } = argv
 
       // 获取所有文件名
@@ -190,14 +195,10 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
         (resolve, reject) => {
           const objects: Minio.BucketItem[] = []
           const stream: Minio.BucketStream<Minio.BucketItem> =
-            minioClient.listObjectsV2(
-              config.bucketName,
-              config.quotesDir,
-              true
-            )
-          stream.on('data', (obj) => objects.push(obj))
+            minioClient.listObjectsV2(config.bucketName, config.quotesDir, true)
+          stream.on('data', obj => objects.push(obj))
           stream.on('end', () => resolve(objects))
-          stream.on('error', (err) => reject(err))
+          stream.on('error', err => reject(err))
         }
       )
 
@@ -212,10 +213,11 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
       // 防止消息轰炸，放到同一个Fragment下发送
       await session.send(
         <>
-          {Array.from(randomQuoteSet).map((quote) => (
+          {Array.from(randomQuoteSet).map(quote => (
             <img
               src={`${minioProtocol}://${config.endPoint}:${config.port}/${config.bucketName}/${quote}`}
-              alt={'quote'} />
+              alt={'quote'}
+            />
           ))}
         </>
       )
@@ -231,7 +233,8 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
       await session.send(
         <img
           src={`${minioProtocol}://${config.endPoint}:${config.port}/${config.bucketName}/${message}`}
-          alt={'quote'} />
+          alt={'quote'}
+        />
       )
     })
 
@@ -246,7 +249,7 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
    * @param {string} model 使用模型
    * @returns {Promise<string>} 生成结果
    */
-  const startLLMGeneration = async (prompt: string, model: string): Promise<string> => {
+  const startLLMGeneration = async (prompt: string): Promise<string> => {
     // 判断是否已有生成任务
     if (ollamaGenerationLock) {
       return '我还在思考喵~请排队喵'
@@ -255,7 +258,6 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
     // 上锁
     ollamaGenerationLock = true
     try {
-
       // 构造openai实例
       const openai = new OpenAI({
         baseURL: config.ollamaEndPoint,
@@ -277,7 +279,7 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
 
       // 生成回答
       const completion = await openai.chat.completions.create({
-        model,
+        model: config.modelName,
         messages
       })
 
@@ -285,16 +287,26 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
       ollamaGenerationLock = false
 
       if (Array.isArray(completion.choices) && completion.choices.length > 0) {
-        const result = (completion.choices[0].message?.content ?? '[Error] 你够了，我无法忍受你的行为')
-          .replace(/<think>.*?<\/think>/s, '').trim()
-        logger.info(`Ollama调用 - 成功生成: Prompt {${prompt}}, Model {${model}} Result {${result}}`)
+        const result = (
+          completion.choices[0].message?.content ??
+          '[Error] 你够了，我无法忍受你的行为'
+        )
+          .replace(/<think>.*?<\/think>/s, '')
+          .trim()
+        logger.info(
+          `Ollama调用 - 成功生成: Prompt {${prompt}}, Model {${config.modelName}} Result {${result}}`
+        )
         return result
       }
-      logger.error(`Ollama调用 - 生成失败: Prompt {${prompt}}, Model {${model}} Error {生成结果不合法或为空}`)
+      logger.error(
+        `Ollama调用 - 生成失败: Prompt {${prompt}}, Model {${config.modelName}} Error {生成结果不合法或为空}`
+      )
       return '[Error] 你够了，我无法忍受你的行为'
     } catch (e: any) {
       ollamaGenerationLock = false
-      logger.error(`Ollama调用 - 生成失败: Prompt {${prompt}}, Model {${model}} Error {${e}}`)
+      logger.error(
+        `Ollama调用 - 生成失败: Prompt {${prompt}}, Model {${config.modelName}} Error {${e}}`
+      )
       return '[Error] 你够了，我无法忍受你的行为'
     }
   }
@@ -303,17 +315,17 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
   // 仅在启用生成情况下进行生成
   if (config.enableOllamaGeneration) {
     /* ================================================================================ */
-    // 锐评 - 使用DeepSeek R1 14b进行锐评
+    // 锐评 - 使用大模型进行锐评
     ctx
       .command('锐评')
-      .usage('使用DeepSeek R1 14b进行锐评')
-      .action(async (argv) => {
+      .usage('使用大模型进行锐评')
+      .action(async argv => {
         const { args } = argv
 
         if (args && Array.isArray(args)) {
           // 构造Prompt
           const prompt = `请你用尖锐的口吻锐评一下：“${args.join(' ')}”`
-          return await startLLMGeneration(prompt, 'deepseek-r1:14b')
+          return await startLLMGeneration(prompt)
         }
 
         // 参数不合法
@@ -321,41 +333,22 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
       })
 
     /* ================================================================================ */
-    // QwQ锐评 - 使用QwQ 32b进行锐评
-    ctx
-      .command('qwq锐评')
-      .usage('使用QwQ 32b进行锐评')
-      .action(async (argv) => {
-        const { args } = argv
-
-        if (args && Array.isArray(args)) {
-          // 构造Prompt
-          const prompt = `请你用尖锐的口吻锐评一下：“${args.join(' ')}”`
-          return await startLLMGeneration(prompt, 'qwq:32b')
-        }
-
-        // 参数不合法
-        return `[Error] 你够了，我无法忍受你的行为`
-      })
-
-    /* ================================================================================ */
-    // 喵评 - 使用QwQ 32b进行善评
+    // 喵评 - 使用大模型进行善评
     ctx
       .command('喵评')
-      .usage('使用QwQ 32b进行锐评')
-      .action(async (argv) => {
+      .usage('使用大模型进行善评')
+      .action(async argv => {
         const { args } = argv
 
         if (args && Array.isArray(args)) {
           // 构造Prompt
           const prompt = `请你用友善的口吻评价一下：“${args.join(' ')}”`
-          return await startLLMGeneration(prompt, 'qwq:32b')
+          return await startLLMGeneration(prompt)
         }
 
         // 参数不合法
         return `[Error] 你够了，我无法忍受你的行为`
       })
-
   }
 
   /* ================================================================================ */
@@ -363,7 +356,7 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
   ctx
     .command('存表情')
     .usage('回复一条包含图片资源的消息，可以得到文件Url')
-    .action(async (argv) => {
+    .action(async argv => {
       const { session } = argv
 
       // 从饮用消息中取元素
@@ -375,5 +368,4 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
         return files.join('\n')
       }
     })
-
 }
