@@ -1,4 +1,4 @@
-import { Context, Logger, Schema } from 'koishi'
+import { Context, Element, Logger, Schema } from 'koishi'
 import fetch, { Response } from 'node-fetch'
 import OpenAI from 'openai'
 import * as cheerio from 'cheerio'
@@ -12,9 +12,12 @@ interface MaizonoBotQuoteConfig {
   accessKey: string
   secretKey: string
   useSSL: boolean
-  bucketName: string
+  quoteBucketName: string
   quotesDir: string
   uploadDir: string
+  loongBucketName: string
+  loongDir: string
+  loongBlacklist: string
 }
 
 interface MaizonoBotOllamaConfig {
@@ -45,9 +48,12 @@ export const Config: Schema<MaizonoBotConfig> = Schema.object({
     .required()
     .description('MinIO Secret Key'),
   useSSL: Schema.boolean().default(false).description('是否使用SSL'),
-  bucketName: Schema.string().default(name).description('Bucket名称'),
+  quoteBucketName: Schema.string().default(name).description('Bucket名称'),
   quotesDir: Schema.string().default('').description('对象存储路径(前缀)'),
   uploadDir: Schema.string().default('').description('对象存储路径(前缀)'),
+  loongBucketName: Schema.string().default('loong').description('Bucket名称'),
+  loongDir: Schema.string().default('').description('对象存储路径(前缀)'),
+  loongBlacklist: Schema.string().default('').description('龙图库黑名单群id'),
   enableOllamaGeneration: Schema.boolean()
     .default(false)
     .description('是否启用Ollama生成功能'),
@@ -82,7 +88,11 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
    * @param {string} src 图片原始uri
    * @returns {Promise<string>} minio对象uri
    */
-  const fetchAndUploadImages = async (src: string): Promise<string> => {
+  const fetchAndUploadImages = async (
+    src: string,
+    bucketName: string,
+    uploadDir: string
+  ): Promise<string> => {
     // 下载图片资源并获取Buffer
     const response: Response = await fetch(src)
     if (!response.ok) {
@@ -93,15 +103,15 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
     )
 
     // 从原始uri中获取fileid生成新文件名
-    const fileName: string = `${config.uploadDir}${Date.now()}-${
+    const fileName: string = `${uploadDir}/${Date.now()}-${
       new URLSearchParams(src.split('?')[1]).get('fileid') ?? 'undefined'
     }`
 
     // 上传到minio
-    await minioClient.putObject(config.bucketName, fileName, buffer)
+    await minioClient.putObject(bucketName, fileName, buffer)
 
     logger.info(`上传语录 - 成功上传: ${fileName}`)
-    return `${minioProtocol}://${config.endPoint}:${config.port}/${config.bucketName}/${fileName}`
+    return `${minioProtocol}://${config.endPoint}:${config.port}/${bucketName}/${fileName}`
   }
 
   /* ================================================================================ */
@@ -135,7 +145,11 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
       const results: string[] = (
         await Promise.allSettled(
           inputs.map(e =>
-            fetchAndUploadImages(e).catch(error => {
+            fetchAndUploadImages(
+              e,
+              config.quoteBucketName,
+              config.uploadDir
+            ).catch(error => {
               logger.error(`上传语录 - ${error}`)
               session.send(error)
               return null
@@ -163,7 +177,11 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
         (resolve, reject) => {
           const objects: Minio.BucketItem[] = []
           const stream: Minio.BucketStream<Minio.BucketItem> =
-            minioClient.listObjectsV2(config.bucketName, config.quotesDir, true)
+            minioClient.listObjectsV2(
+              config.quoteBucketName,
+              config.quotesDir,
+              true
+            )
           stream.on('data', obj => objects.push(obj))
           stream.on('end', () => resolve(objects))
           stream.on('error', err => reject(err))
@@ -176,7 +194,7 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
       logger.info(`语录 - 抽取: ${randomQuote}`)
       await session.send(
         <img
-          src={`${minioProtocol}://${config.endPoint}:${config.port}/${config.bucketName}/${randomQuote}`}
+          src={`${minioProtocol}://${config.endPoint}:${config.port}/${config.quoteBucketName}/${randomQuote}`}
           alt={'quote'}
         />
       )
@@ -195,7 +213,11 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
         (resolve, reject) => {
           const objects: Minio.BucketItem[] = []
           const stream: Minio.BucketStream<Minio.BucketItem> =
-            minioClient.listObjectsV2(config.bucketName, config.quotesDir, true)
+            minioClient.listObjectsV2(
+              config.quoteBucketName,
+              config.quotesDir,
+              true
+            )
           stream.on('data', obj => objects.push(obj))
           stream.on('end', () => resolve(objects))
           stream.on('error', err => reject(err))
@@ -203,11 +225,16 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
       )
 
       // 集合去重
-      const randomQuoteSet: Set<string> = new Set()
-      while (randomQuoteSet.size < 10) {
-        randomQuoteSet.add(
-          quotes[Math.floor(Math.random() * quotes.length)].name
-        )
+      let randomQuoteSet: Set<string>
+      if (quotes.length < 10) {
+        randomQuoteSet = new Set(quotes.map(e => e.name))
+      } else {
+        randomQuoteSet = new Set()
+        while (randomQuoteSet.size < 10) {
+          randomQuoteSet.add(
+            quotes[Math.floor(Math.random() * quotes.length)].name
+          )
+        }
       }
 
       // 防止消息轰炸，放到同一个Fragment下发送
@@ -215,12 +242,175 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
         <>
           {Array.from(randomQuoteSet).map(quote => (
             <img
-              src={`${minioProtocol}://${config.endPoint}:${config.port}/${config.bucketName}/${quote}`}
+              src={`${minioProtocol}://${config.endPoint}:${config.port}/${config.quoteBucketName}/${quote}`}
               alt={'quote'}
             />
           ))}
         </>
       )
+    })
+
+  /* ================================================================================ */
+  // 上传图片 - 支持连续发送图片，上传龙图
+  ctx
+    .command('上传图片')
+    .usage('支持连续发送图片，回复"结束"结束上传')
+    .action(async argv => {
+      const { session } = argv
+      if (
+        config.loongBlacklist
+          .split(',')
+          .map(e => e.trim())
+          .includes(session.channelId)
+      ) {
+        return '这里不可以！'
+      } else {
+        await session.send('发送图片开始上传，回复"结束"结束上传')
+
+        // 获取原始输入
+        const rawInputs: string[] = []
+        while (true) {
+          const content: string = await session.prompt()
+          if (!content || content == '结束') {
+            break
+          }
+          rawInputs.push(content)
+        }
+
+        // 获取原始输入元素图片src，过滤非图元素
+        const inputs: string[] = rawInputs
+          .map(rr => {
+            const $ = cheerio.load(rr)
+            return $('img').attr('src')
+          })
+          .filter(item => item != null)
+
+        // 轮流上传，获取上传后对象uri
+        const results: string[] = (
+          await Promise.allSettled(
+            inputs.map(e =>
+              fetchAndUploadImages(
+                e,
+                config.loongBucketName,
+                config.loongDir
+              ).catch(error => {
+                logger.error(`上传图片 - ${error}`)
+                session.send(error)
+                return null
+              })
+            )
+          )
+        )
+          .filter(({ status }) => status == 'fulfilled')
+          .map(e => (e as PromiseFulfilledResult<string>).value)
+
+        return `试图上传${inputs.length}张图片\n上传成功${results.length}张图片`
+      }
+    })
+
+  /* ================================================================================ */
+  // 龙 - 随机抽取一张龙图
+  ctx
+    .command('龙')
+    .usage('随机抽取一张龙图')
+    .action(async argv => {
+      console.log(argv)
+      const { session } = argv
+
+      if (
+        config.loongBlacklist
+          .split(',')
+          .map(e => e.trim())
+          .includes(session.channelId)
+      ) {
+        return '这里不可以！'
+      } else {
+        // 获取所有文件名
+        const quotes: Minio.BucketItem[] = await new Promise(
+          (resolve, reject) => {
+            const objects: Minio.BucketItem[] = []
+            const stream: Minio.BucketStream<Minio.BucketItem> =
+              minioClient.listObjectsV2(
+                config.loongBucketName,
+                config.loongDir,
+                true
+              )
+            stream.on('data', obj => objects.push(obj))
+            stream.on('end', () => resolve(objects))
+            stream.on('error', err => reject(err))
+          }
+        )
+
+        // 抽一个
+        const randomQuote: string =
+          quotes[Math.floor(Math.random() * quotes.length)].name
+        logger.info(`龙 - 抽取: ${randomQuote}`)
+        await session.send(
+          <img
+            src={`${minioProtocol}://${config.endPoint}:${config.port}/${config.loongBucketName}/${randomQuote}`}
+            alt={'loong'}
+          />
+        )
+      }
+    })
+
+  /* ================================================================================ */
+  // 龙龙龙 - 随机抽取十张龙图
+  ctx
+    .command('龙龙龙')
+    .usage('随机抽取十张龙图')
+    .action(async argv => {
+      const { session } = argv
+
+      if (
+        config.loongBlacklist
+          .split(',')
+          .map(e => e.trim())
+          .includes(session.channelId)
+      ) {
+        return '这里不可以！'
+      } else {
+        // 获取所有文件名
+        const quotes: Minio.BucketItem[] = await new Promise(
+          (resolve, reject) => {
+            const objects: Minio.BucketItem[] = []
+            const stream: Minio.BucketStream<Minio.BucketItem> =
+              minioClient.listObjectsV2(
+                config.loongBucketName,
+                config.loongDir,
+                true
+              )
+            stream.on('data', obj => objects.push(obj))
+            stream.on('end', () => resolve(objects))
+            stream.on('error', err => reject(err))
+          }
+        )
+
+        // 集合去重
+        let randomQuoteSet: Set<string>
+        if (quotes.length < 10) {
+          randomQuoteSet = new Set(quotes.map(e => e.name))
+        } else {
+          randomQuoteSet = new Set()
+          while (randomQuoteSet.size < 10) {
+            randomQuoteSet.add(
+              quotes[Math.floor(Math.random() * quotes.length)].name
+            )
+          }
+        }
+
+        // 防止消息轰炸，放到同一个Fragment下发送
+        await session.send(
+          <>
+            {Array.from(randomQuoteSet).map(quote => (
+              <img
+                src={`${minioProtocol}://${config.endPoint}:${config.port}/${config.loongBucketName}/${quote}`}
+                alt={'quote'}
+              />
+            ))}
+          </>
+        )
+      }
     })
 
   /* ================================================================================ */
@@ -232,7 +422,7 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
       const { session } = argv
       await session.send(
         <img
-          src={`${minioProtocol}://${config.endPoint}:${config.port}/${config.bucketName}/${message}`}
+          src={`${minioProtocol}://${config.endPoint}:${config.port}/${config.quoteBucketName}/${message}`}
           alt={'quote'}
         />
       )
@@ -361,7 +551,7 @@ export function apply(ctx: Context, config: MaizonoBotConfig) {
 
       // 从饮用消息中取元素
       if (session?.event?.message?.quote?.elements) {
-        const files: string[] = session?.event.message?.quote.elements
+        const files: any[] = session?.event.message?.quote.elements
           .filter(element => element.type === 'img')
           .map(element => element.attrs.src ?? null)
           .filter(element => element !== null)
