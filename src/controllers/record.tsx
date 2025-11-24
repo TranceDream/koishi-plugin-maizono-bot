@@ -1,4 +1,4 @@
-import { Argv } from 'koishi'
+import { Argv, h } from 'koishi'
 import { MinioUtils } from '../utils/minio'
 import { logger, MaizonoBotConfig } from '..'
 
@@ -43,6 +43,12 @@ export const gachaRecord = (config: MaizonoBotConfig) => {
     }
 
     const result = await MinioUtils.gacha(mapping.bucket, mapping.dir)
-    await session.send(<audio src={result} />)
+    const response: Response = await fetch(result)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.statusText}`)
+    }
+    const arrayBuffer = await response.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+    await session.send(h.audio(buffer.toString()))
   }
 }
