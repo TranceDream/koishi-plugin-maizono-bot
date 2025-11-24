@@ -1,7 +1,7 @@
 import { Argv, h } from 'koishi'
-import { makeSymmetry, SymmetryMode } from '../utils/symmetry'
+import { makeBackwards } from '../utils/backwards'
 
-export const symmetry = (mode: SymmetryMode) => {
+export const backwards = () => {
   return async (argv: Argv) => {
     const { session } = argv
 
@@ -12,7 +12,7 @@ export const symmetry = (mode: SymmetryMode) => {
         .map(element => element.attrs.src ?? null)
       const imageUrl = urls.shift()
       if (imageUrl) {
-        const { buffer } = await makeSymmetry(imageUrl, mode)
+        const { buffer } = await makeBackwards(imageUrl)
         if (buffer) {
           // @ts-ignore
           await session.send(h.image(buffer))
