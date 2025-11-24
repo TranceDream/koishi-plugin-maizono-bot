@@ -91,7 +91,7 @@ export class MinioUtils {
     const buffer = fs.readFileSync(src)
 
     // 生成文件名
-    const fileName = `${Date.now()}-${src.split('.')[0] ?? 'undefined'}`
+    const fileName = `${Date.now()}-${src.split('/').pop().split('.')[0] ?? 'undefined'}`
     const objectName = uploadDir ? path.join(uploadDir, fileName) : fileName
 
     // 上传文件到 MinIO
