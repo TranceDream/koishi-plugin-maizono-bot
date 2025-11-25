@@ -48,7 +48,7 @@ export const gachaRecord = (config: MaizonoBotConfig) => {
       throw new Error(`Failed to fetch image: ${response.statusText}`)
     }
     const arrayBuffer = await response.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-    await session.send(h.audio(buffer.toString()))
+    // @ts-ignore
+    await session.send(h.audio(arrayBuffer))
   }
 }
